@@ -11,7 +11,7 @@ type GroupRecord struct {
 	User          primitive.ObjectID `bson:"user" json:"user"`
 	QuestionGroup primitive.ObjectID `bson:"question_group" json:"questionGroup"`
 	Score         int                `bson:"score" json:"score"`
-	Size          int                `bson:"size" json:"size"`
+	Size          int                `bson:"question_size" json:"questionSize"`
 	GroupCode     *string            `bson:"group_code" json:"groupCode"`
 	CreatedAt     time.Time          `bson:"created_at" json:"createdAt"`
 	UpdatedAt     time.Time          `bson:"updated_at" json:"updatedAt"`

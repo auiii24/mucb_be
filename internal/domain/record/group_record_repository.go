@@ -7,4 +7,5 @@ import (
 type GroupRecordRepository interface {
 	CreateManyGroupRecord(questionGroup *[]GroupRecord) error
 	HasSubmittedToday(user primitive.ObjectID) (bool, error)
+	RemoveDataByUserId(id string) error
 }

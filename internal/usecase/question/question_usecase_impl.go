@@ -2,6 +2,7 @@ package question
 
 import (
 	"mucb_be/internal/domain/question"
+	"mucb_be/internal/domain/record"
 	"mucb_be/internal/domain/user"
 	"mucb_be/internal/errors"
 	"mucb_be/internal/infrastructure/security"
@@ -13,15 +14,18 @@ import (
 type QuestionUseCaseImpl struct {
 	questionGroupRepo  question.QuestionGroupRepository
 	questionChoiceRepo question.QuestionChoiceRepository
+	groupRecordRepo    record.GroupRecordRepository
 }
 
 func NewAdminUseCase(
 	questionGroupRepo question.QuestionGroupRepository,
 	questionChoiceRepo question.QuestionChoiceRepository,
+	groupRecordRepo record.GroupRecordRepository,
 ) QuestionInterface {
 	return &QuestionUseCaseImpl{
 		questionGroupRepo:  questionGroupRepo,
 		questionChoiceRepo: questionChoiceRepo,
+		groupRecordRepo:    groupRecordRepo,
 	}
 }
 
@@ -120,7 +124,7 @@ func (u *QuestionUseCaseImpl) CreateQuestionChoice(req *CreateQuestionChoiceRequ
 	return nil
 }
 
-func (u *QuestionUseCaseImpl) FindAllQuestionChoiceByQuestionGroup(req *GetAllQuestionChoiceByQuestionGroupRequest, claims *security.AccessTokenModel) (*GetAllQuestionChoiceByQuestionGroupOutput, error) {
+func (u *QuestionUseCaseImpl) FindAllQuestionChoiceByQuestionGroup(idStr string, claims *security.AccessTokenModel) (*GetAllQuestionChoiceByQuestionGroupOutput, error) {
 	if claims.Role == user.RoleUser {
 		return nil, errors.NewCustomError(
 			http.StatusForbidden,
@@ -130,7 +134,7 @@ func (u *QuestionUseCaseImpl) FindAllQuestionChoiceByQuestionGroup(req *GetAllQu
 		)
 	}
 
-	objectId, err := primitive.ObjectIDFromHex(req.QuestionGroup)
+	objectId, err := primitive.ObjectIDFromHex(idStr)
 	if err != nil {
 		return nil, errors.NewCustomError(
 			http.StatusForbidden,
@@ -156,10 +160,15 @@ func (u *QuestionUseCaseImpl) FindAllQuestionChoiceByQuestionGroup(req *GetAllQu
 }
 
 func (u *QuestionUseCaseImpl) GetQuestionWithRandomChoices(claims *security.AccessTokenModel) (*GetQuestionWithRandomChoicesOutout, error) {
+	err := u.CheckAvailableQuestion(claims)
+	if err != nil {
+		return nil, err
+	}
+
 	questionGroup, err := u.questionGroupRepo.FindGroupsWithRandomChoices()
 	if err != nil {
 		return nil, errors.NewCustomError(
-			http.StatusForbidden,
+			http.StatusBadRequest,
 			"UCE004005002",
 			"Question group not found.",
 			err.Error(),
@@ -175,9 +184,100 @@ func (u *QuestionUseCaseImpl) UpdateQuestion(req *UpdateQuestionRequest) error {
 	err := u.questionChoiceRepo.UpdateQuestionChoiceById(req.ID, req.Question, req.ShouldInvert)
 	if err != nil {
 		return errors.NewCustomError(
-			http.StatusForbidden,
+			http.StatusBadRequest,
 			"UCE004006001",
 			err.Error(),
+			err.Error(),
+		)
+	}
+
+	return nil
+}
+
+func (u *QuestionUseCaseImpl) CheckAvailableQuestion(claims *security.AccessTokenModel) error {
+	userObjectId, err := primitive.ObjectIDFromHex(claims.ID)
+	if err != nil {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE004007001",
+			"Failed to check user.",
+			err.Error(),
+		)
+	}
+
+	isAlreadySubmit, err := u.groupRecordRepo.HasSubmittedToday(userObjectId)
+	if err != nil {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE004007002",
+			"Failed to check submission status.",
+			err.Error(),
+		)
+	}
+
+	if isAlreadySubmit {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE004007003",
+			"You can only submit once per day",
+			"",
+		)
+	}
+
+	return nil
+}
+
+func (u *QuestionUseCaseImpl) RemoveChoice(req *RemoveChoiceRequest) error {
+	err := u.questionChoiceRepo.RemoveChoiceById(req.ID)
+	if err != nil {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE004008001",
+			"Failed to remove choice.",
+			err.Error(),
+		)
+	}
+
+	return nil
+}
+
+func (u *QuestionUseCaseImpl) RemoveQuestionGroup(req *RemoveQuestionGroupRequest) error {
+	err := u.questionGroupRepo.RemoveQuestionGroupById(req.ID)
+	if err != nil {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE004009001",
+			"Failed to remove question group.",
+			err.Error(),
+		)
+	}
+
+	u.questionChoiceRepo.RemoveChoicesByQuestionGroupId(req.ID)
+
+	return nil
+}
+
+func (u *QuestionUseCaseImpl) GetQuestionGroupById(id string) (*question.QuestionGroup, error) {
+	existQuestionGroup, err := u.questionGroupRepo.FindQuestionGroupById(id)
+	if err != nil {
+		return nil, errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE004010001",
+			"Failed to get question group.",
+			err.Error(),
+		)
+	}
+
+	return existQuestionGroup, nil
+}
+
+func (u *QuestionUseCaseImpl) UpdateQuestionGroup(req *UpdateQuestionGroupRequest) error {
+	err := u.questionGroupRepo.UpdateQuestionGroupById(req.ID, req.ColumnName, req.Description, req.Limit)
+	if err != nil {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE004011001",
+			"Failed to update question group.",
 			err.Error(),
 		)
 	}

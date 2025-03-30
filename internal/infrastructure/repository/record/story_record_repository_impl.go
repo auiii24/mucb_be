@@ -5,6 +5,8 @@ import (
 	"mucb_be/internal/domain/record"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -24,4 +26,26 @@ func (r *StoryRecordRepositoryMongo) CreateStoryRecord(storyRecord *record.Story
 
 	_, err := r.storyRecordCollection.InsertOne(ctx, storyRecord)
 	return err
+}
+
+// RemoveDataByUserId implements record.StoryRecordRepository.
+func (r *StoryRecordRepositoryMongo) RemoveDataByUserId(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{
+		"user": objectID,
+	}
+
+	_, err = r.storyRecordCollection.DeleteMany(ctx, filter)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -16,3 +16,8 @@ type RenewUserRequest struct {
 type RenewUserOutput struct {
 	AccessToken string `json:"accessToken"`
 }
+
+type GetUserInfoRequest struct {
+	Name      string  `json:"name"`
+	GroupCode *string `json:"group"`
+}

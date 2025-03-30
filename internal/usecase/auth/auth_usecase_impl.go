@@ -8,9 +8,11 @@ import (
 	"mucb_be/internal/errors"
 	"mucb_be/internal/infrastructure/security"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -199,24 +201,64 @@ func (u *AuthUseCaseImpl) RenewAdmin(req *RenewAdminRequest, userAgent string) (
 }
 
 func (u *AuthUseCaseImpl) SignInUser(req *SignInUserRequest) (*SignInUserOutput, error) {
-	isBlocked, err := u.otpAttemptRepo.CheckOtpRateLimit(req.PhoneNumber)
+	phoneNumber, err := u.encryptionService.DecryptData(req.PhoneNumber)
+	if err != nil {
+		return nil, errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002003007",
+			"Failed to decrypt phone number",
+			err.Error(),
+		)
+	}
+
+	isMatched, err := user.ValidateThaiPhoneNumber(phoneNumber)
+	if err != nil {
+		return nil, errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002003008",
+			"Failed to validate phone number",
+			err.Error(),
+		)
+	}
+
+	if !isMatched {
+		return nil, errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002003009",
+			"Invalid phone number format: "+phoneNumber+". Please enter a valid Thai phone number (must start with +66 followed by 9 digits, e.g., +66871234567).",
+			"Invalid phone number format: "+phoneNumber+". Please enter a valid Thai phone number (must start with +66 followed by 9 digits, e.g., +66871234567).",
+		)
+	}
+
+	var isAllowedForTester = phoneNumber == "+66800000000"
+
+	isBlocked, err := u.otpAttemptRepo.CheckOtpRateLimit(phoneNumber)
 	if isBlocked {
 		return nil, errors.NewCustomError(
-			http.StatusTooManyRequests,
+			http.StatusBadRequest,
 			"UCE002003006",
 			"Too many OTP requests. Please wait before trying again.",
 			err.Error(),
 		)
 	}
 
-	existUser, err := u.userRepo.FindUserByPhoneNumber(req.PhoneNumber)
+	existUser, err := u.userRepo.FindUserByPhoneNumber(phoneNumber)
 	if existUser != nil {
-		_, err = u.sendOtpToUser(existUser)
+		if existUser.State == user.UserStateSuspended {
+			return nil, errors.NewCustomError(
+				http.StatusBadRequest,
+				"UCE002003010",
+				"User suspended",
+				"User suspended",
+			)
+		}
+
+		otp, err := u.sendOtpToUser(existUser, isAllowedForTester)
 		if err != nil {
 			return nil, err
 		}
 
-		_ = u.otpAttemptRepo.IncrementOtpAttempt(req.PhoneNumber)
+		_ = u.otpAttemptRepo.IncrementOtpAttempt(phoneNumber)
 
 		phoneNumberEncrypted, err := u.encryptPhoneNumber(existUser)
 		if err != nil {
@@ -224,7 +266,8 @@ func (u *AuthUseCaseImpl) SignInUser(req *SignInUserRequest) (*SignInUserOutput,
 		}
 
 		return &SignInUserOutput{
-			Token: phoneNumberEncrypted,
+			Token:   phoneNumberEncrypted,
+			RefCode: otp.RefCode,
 		}, nil
 	}
 
@@ -238,7 +281,7 @@ func (u *AuthUseCaseImpl) SignInUser(req *SignInUserRequest) (*SignInUserOutput,
 	}
 
 	user := user.NewUser(
-		req.PhoneNumber,
+		phoneNumber,
 	)
 
 	err = u.userRepo.CreateUser(user)
@@ -251,12 +294,12 @@ func (u *AuthUseCaseImpl) SignInUser(req *SignInUserRequest) (*SignInUserOutput,
 		)
 	}
 
-	_, err = u.sendOtpToUser(user)
+	otp, err := u.sendOtpToUser(user, isAllowedForTester)
 	if err != nil {
 		return nil, err
 	}
 
-	_ = u.otpAttemptRepo.IncrementOtpAttempt(req.PhoneNumber)
+	_ = u.otpAttemptRepo.IncrementOtpAttempt(phoneNumber)
 
 	phoneNumberEncrypted, err := u.encryptPhoneNumber(user)
 	if err != nil {
@@ -264,7 +307,8 @@ func (u *AuthUseCaseImpl) SignInUser(req *SignInUserRequest) (*SignInUserOutput,
 	}
 
 	return &SignInUserOutput{
-		Token: phoneNumberEncrypted,
+		Token:   phoneNumberEncrypted,
+		RefCode: otp.RefCode,
 	}, nil
 }
 
@@ -273,7 +317,7 @@ func (u *AuthUseCaseImpl) encryptPhoneNumber(user *user.User) (string, error) {
 	if err != nil {
 		return "", errors.NewCustomError(
 			http.StatusBadRequest,
-			"UCE002005001",
+			"UCE002007001",
 			"Internal server error.",
 			err.Error(),
 		)
@@ -287,7 +331,7 @@ func (u *AuthUseCaseImpl) decryptPhoneNumber(plaintext string) (string, error) {
 	if err != nil {
 		return "", errors.NewCustomError(
 			http.StatusBadRequest,
-			"UCE002002001",
+			"UCE002004012",
 			"Invalid token.",
 			err.Error(),
 		)
@@ -296,9 +340,16 @@ func (u *AuthUseCaseImpl) decryptPhoneNumber(plaintext string) (string, error) {
 	return phoneNumber, nil
 }
 
-func (u *AuthUseCaseImpl) sendOtpToUser(user *user.User) (*auth.Otp, error) {
+func (u *AuthUseCaseImpl) sendOtpToUser(user *user.User, isAllowedByPass bool) (*auth.Otp, error) {
 	refCode := security.GenerateRefCode()
-	otpCode := security.GenerateOtpCode()
+
+	var otpCode string
+	if isAllowedByPass {
+		otpCode = "111222"
+	} else {
+		otpCode = security.GenerateOtpCode()
+	}
+
 	otp := auth.NewOtp(
 		user.ID,
 		user.PhoneNumber,
@@ -319,7 +370,7 @@ func (u *AuthUseCaseImpl) sendOtpToUser(user *user.User) (*auth.Otp, error) {
 	return otp, nil
 }
 
-func (u *AuthUseCaseImpl) VerifyOtp(req *VerifyOtpRequest) (*VerifyOtpOutput, error) {
+func (u *AuthUseCaseImpl) VerifyOtp(req *VerifyOtpRequest, c *gin.Context) (*VerifyOtpOutput, error) {
 	phoneNumber, err := u.decryptPhoneNumber(req.Token)
 	if err != nil {
 		return nil, err
@@ -383,6 +434,15 @@ func (u *AuthUseCaseImpl) VerifyOtp(req *VerifyOtpRequest) (*VerifyOtpOutput, er
 		)
 	}
 
+	if currentUser.State == user.UserStateSuspended {
+		return nil, errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002004009",
+			"User suspended.",
+			"User suspended.",
+		)
+	}
+
 	accessToken, err := u.jwtService.GenerateAccessToken(currentUser.ID.Hex(), user.RoleUser)
 	if err != nil {
 		return nil, errors.NewCustomError(
@@ -393,10 +453,17 @@ func (u *AuthUseCaseImpl) VerifyOtp(req *VerifyOtpRequest) (*VerifyOtpOutput, er
 		)
 	}
 
+	uniqueId := c.GetHeader("X-UNIQUE-ID")
+	brand := c.GetHeader("X-BRAND")
+	platform := c.GetHeader("X-PLATFORM")
+	deviceId := c.GetHeader("X-DEVICE-ID")
+
+	deviceInfo := platform + "\n" + brand + "\n" + deviceId
+
 	token := auth.NewToken(
 		currentUser.ID,
-		"",
-		"TODO: USE OS NAME, DEVICE INFO",
+		uniqueId,
+		deviceInfo,
 		auth.TokenUserType,
 	)
 	err = u.authRepo.CreateToken(*token)
@@ -445,11 +512,11 @@ func (u *AuthUseCaseImpl) VerifyOtp(req *VerifyOtpRequest) (*VerifyOtpOutput, er
 	}, nil
 }
 
-func (u *AuthUseCaseImpl) RenewUser(req *RenewUserRequest, userAgent string) (*RenewUserOutput, error) {
+func (u *AuthUseCaseImpl) RenewUser(req *RenewUserRequest, c *gin.Context) (*RenewUserOutput, error) {
 	jsonData, err := u.encryptionService.DecryptRefreshToken(req.RefreshToken)
 	if err != nil {
 		return nil, errors.NewCustomError(
-			http.StatusBadRequest,
+			http.StatusUnauthorized,
 			"UCE002005001",
 			"Invalid token.",
 			err.Error(),
@@ -460,7 +527,7 @@ func (u *AuthUseCaseImpl) RenewUser(req *RenewUserRequest, userAgent string) (*R
 	err = json.Unmarshal([]byte(jsonData), &payload)
 	if err != nil {
 		return nil, errors.NewCustomError(
-			http.StatusBadRequest,
+			http.StatusUnauthorized,
 			"UCE002005002",
 			"Invalid token.",
 			err.Error(),
@@ -470,7 +537,7 @@ func (u *AuthUseCaseImpl) RenewUser(req *RenewUserRequest, userAgent string) (*R
 	tokenResponse, err := u.authRepo.FindTokenById(payload.Token)
 	if err != nil {
 		return nil, errors.NewCustomError(
-			http.StatusBadRequest,
+			http.StatusUnauthorized,
 			"UCE002005003",
 			"Token not found.",
 			err.Error(),
@@ -479,7 +546,7 @@ func (u *AuthUseCaseImpl) RenewUser(req *RenewUserRequest, userAgent string) (*R
 
 	if tokenResponse.UserType != auth.TokenUserType {
 		return nil, errors.NewCustomError(
-			http.StatusBadRequest,
+			http.StatusUnauthorized,
 			"UCE002005004",
 			"Invalid token.",
 			"",
@@ -489,10 +556,30 @@ func (u *AuthUseCaseImpl) RenewUser(req *RenewUserRequest, userAgent string) (*R
 	existUser, err := u.userRepo.FindUserById(tokenResponse.User.Hex())
 	if err != nil {
 		return nil, errors.NewCustomError(
-			http.StatusBadRequest,
+			http.StatusUnauthorized,
 			"UCE002005005",
 			"User not found.",
 			err.Error(),
+		)
+	}
+
+	if existUser.State == user.UserStateSuspended {
+		return nil, errors.NewCustomError(
+			http.StatusUnauthorized,
+			"UCE002005007",
+			"User not found.",
+			"User not found.",
+		)
+	}
+
+	uniqueId := c.GetHeader("X-UNIQUE-ID")
+
+	if tokenResponse.UniqueID != uniqueId {
+		return nil, errors.NewCustomError(
+			http.StatusUnauthorized,
+			"UCE002005008",
+			"Invalid info.",
+			"Invalid info.",
 		)
 	}
 
@@ -502,12 +589,14 @@ func (u *AuthUseCaseImpl) RenewUser(req *RenewUserRequest, userAgent string) (*R
 	)
 	if err != nil {
 		return nil, errors.NewCustomError(
-			http.StatusBadRequest,
+			http.StatusUnauthorized,
 			"UCE002005006",
 			"Internal server error.",
 			err.Error(),
 		)
 	}
+
+	u.authRepo.UpdateTimestampByTokenId(payload.Token)
 
 	return &RenewUserOutput{
 		AccessToken: accessToken,
@@ -537,6 +626,98 @@ func (u *AuthUseCaseImpl) SignOut(req *SignOutRequest) error {
 	}
 
 	u.authRepo.RemoveTokenById(payload.Token)
+
+	return nil
+}
+
+func (u *AuthUseCaseImpl) FindAllToken(req *FindAllTokensRequest, claims *security.AccessTokenModel) (*FindAllTokensOutput, error) {
+	jsonData, err := u.encryptionService.DecryptRefreshToken(req.RefreshToken)
+	if err != nil {
+		return nil, errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002008001",
+			"Invalid token.",
+			err.Error(),
+		)
+	}
+
+	var payload RefreshTokenPayload
+	err = json.Unmarshal([]byte(jsonData), &payload)
+	if err != nil {
+		return nil, errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002008002",
+			"Invalid token.",
+			err.Error(),
+		)
+	}
+
+	tokens, err := u.authRepo.FindAllTokenByUserId(claims.ID)
+	if err != nil {
+		return nil, errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002008003",
+			"Failed to get token.",
+			err.Error(),
+		)
+	}
+
+	var bundleTokens []TokenWithFlag
+	for _, token := range *tokens {
+		bundleTokens = append(bundleTokens, TokenWithFlag{
+			IsCurrentToken: payload.Token == string(token.ID.Hex()),
+			Token:          token,
+		})
+	}
+
+	// ✅ First: Sort by IsCurrentToken (true first)
+	sort.SliceStable(bundleTokens, func(i, j int) bool {
+		return bundleTokens[i].IsCurrentToken && !bundleTokens[j].IsCurrentToken
+	})
+
+	// ✅ Second: Sort by UpdatedAt (most recent first) within each IsCurrentToken group
+	sort.SliceStable(bundleTokens, func(i, j int) bool {
+		if bundleTokens[i].IsCurrentToken == bundleTokens[j].IsCurrentToken {
+			return bundleTokens[i].UpdatedAt.After(bundleTokens[j].UpdatedAt) // Newest first
+		}
+		return false // Keep existing order from the first sort
+	})
+
+	return &FindAllTokensOutput{
+		Tokens: &bundleTokens,
+	}, nil
+}
+
+// RevokeToken implements AuthUseCaseInterface.
+func (u *AuthUseCaseImpl) RevokeToken(req *RevokeTokenRequest, claims *security.AccessTokenModel) error {
+	existToken, err := u.authRepo.FindTokenById(req.Token)
+	if err != nil {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002009001",
+			"Failed to get token.",
+			err.Error(),
+		)
+	}
+
+	if existToken.User.Hex() != claims.ID {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002009002",
+			"Failed to validate user.",
+			"Failed to validate user.",
+		)
+	}
+
+	err = u.authRepo.RemoveTokenById(req.Token)
+	if err != nil {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE002009003",
+			"Failed to remove token.",
+			err.Error(),
+		)
+	}
 
 	return nil
 }

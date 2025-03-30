@@ -101,21 +101,15 @@ func (h QuestionHandler) CreateQuestionChoice(c *gin.Context) {
 }
 
 func (h QuestionHandler) FindAllQuestionChoiceByQuestionGroup(c *gin.Context) {
+	idStr := c.Param("id")
+
 	claims, err := utils.GetUserClaims(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	var request question.GetAllQuestionChoiceByQuestionGroupRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
-		c.Error(
-			errors.NewCustomError(http.StatusBadRequest, "VE001001", err.Error(), err.Error()),
-		)
-		return
-	}
-
-	response, err := h.questionUseCase.FindAllQuestionChoiceByQuestionGroup(&request, claims)
+	response, err := h.questionUseCase.FindAllQuestionChoiceByQuestionGroup(idStr, claims)
 	if err != nil {
 		c.Error(err)
 		return
@@ -150,6 +144,88 @@ func (h QuestionHandler) UpdateQuestion(c *gin.Context) {
 	}
 
 	err := h.questionUseCase.UpdateQuestion(&request)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
+}
+
+func (h QuestionHandler) CheckAvailableQuestion(c *gin.Context) {
+	claims, err := utils.GetUserClaims(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	err = h.questionUseCase.CheckAvailableQuestion(claims)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
+}
+
+func (h QuestionHandler) RemoveChoice(c *gin.Context) {
+	var request question.RemoveChoiceRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.Error(
+			errors.NewCustomError(http.StatusBadRequest, "VE001001", err.Error(), err.Error()),
+		)
+		return
+	}
+
+	err := h.questionUseCase.RemoveChoice(&request)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
+}
+
+func (h QuestionHandler) RemoveQuestionGroup(c *gin.Context) {
+	var request question.RemoveQuestionGroupRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.Error(
+			errors.NewCustomError(http.StatusBadRequest, "VE001001", err.Error(), err.Error()),
+		)
+		return
+	}
+
+	err := h.questionUseCase.RemoveQuestionGroup(&request)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
+}
+
+func (h QuestionHandler) GetQuestionGroupById(c *gin.Context) {
+	idStr := c.Param("id")
+
+	response, err := h.questionUseCase.GetQuestionGroupById(idStr)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func (h QuestionHandler) UpdateQuestionGroup(c *gin.Context) {
+	var request question.UpdateQuestionGroupRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.Error(
+			errors.NewCustomError(http.StatusBadRequest, "VE001001", err.Error(), err.Error()),
+		)
+		return
+	}
+
+	err := h.questionUseCase.UpdateQuestionGroup(&request)
 	if err != nil {
 		c.Error(err)
 		return

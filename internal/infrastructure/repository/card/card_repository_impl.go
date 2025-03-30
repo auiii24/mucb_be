@@ -58,7 +58,7 @@ func (r *CardRepositoryMongo) FindAllCardByRole(page, limit int, isAdmin bool) (
 		filter["is_active"] = true
 	}
 
-	total, err := r.cardCollection.CountDocuments(ctx, bson.M{})
+	total, err := r.cardCollection.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}

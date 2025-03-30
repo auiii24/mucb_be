@@ -77,11 +77,53 @@ func (r *QuestionChoiceRepositoryMongo) UpdateQuestionChoiceById(id, question st
 	}
 
 	if result.MatchedCount == 0 {
-		return fmt.Errorf("Data not found.") // ❌ No match found
+		return fmt.Errorf("data not found")
 	}
 
 	if result.ModifiedCount == 0 {
-		return fmt.Errorf("Can not update.") // ❌ Found but no changes
+		return fmt.Errorf("can not update")
+	}
+
+	return nil
+}
+
+func (r *QuestionChoiceRepositoryMongo) RemoveChoiceById(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{
+		"_id": objectID,
+	}
+
+	_, err = r.questionChoiceCollection.DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *QuestionChoiceRepositoryMongo) RemoveChoicesByQuestionGroupId(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{
+		"question_group": objectID,
+	}
+
+	_, err = r.questionChoiceCollection.DeleteMany(ctx, filter)
+	if err != nil {
+		return err
 	}
 
 	return nil

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -105,4 +106,79 @@ func (r *QuestionGroupRepositoryMongo) FindGroupsWithRandomChoices() (*[]questio
 	}
 
 	return &questionGroups, nil
+}
+
+func (r *QuestionGroupRepositoryMongo) RemoveQuestionGroupById(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{
+		"_id": objectID,
+	}
+
+	_, err = r.questionGroupCollection.DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *QuestionGroupRepositoryMongo) FindQuestionGroupById(id string) (*question.QuestionGroup, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var questionGroup question.QuestionGroup
+	err = r.questionGroupCollection.FindOne(ctx, bson.M{
+		"_id": objectID,
+	}).Decode(&questionGroup)
+	if err != nil {
+		return nil, err
+	}
+
+	return &questionGroup, nil
+}
+
+func (r *QuestionGroupRepositoryMongo) UpdateQuestionGroupById(id string, columnName string, description string, limit int) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"column_name": columnName,
+			"description": description,
+			"limit":       limit,
+			"updated_at":  time.Now(),
+		},
+	}
+
+	result, err := r.questionGroupCollection.UpdateOne(ctx, bson.M{"_id": objectID}, update)
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("data not found")
+	}
+
+	if result.ModifiedCount == 0 {
+		return fmt.Errorf("can not update")
+	}
+
+	return nil
 }

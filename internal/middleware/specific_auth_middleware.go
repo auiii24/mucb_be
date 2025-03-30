@@ -14,9 +14,10 @@ import (
 func SpecificAuthMiddleware(jwtService security.JwtServiceInterface, requiredRoles []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// ✅ Extract JWT token from Authorization header
-		authHeader := c.GetHeader("Authorization")
+		authHeader := c.GetHeader("X-Authorization")
+
 		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    "MWE001001001",
 				"message": "Missing authorization header.",
 			})
@@ -26,7 +27,7 @@ func SpecificAuthMiddleware(jwtService security.JwtServiceInterface, requiredRol
 		// ✅ Ensure token format is "Bearer <token>"
 		tokenParts := strings.Split(authHeader, " ")
 		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    "MWE001001002",
 				"message": "Invalid authorization header format.",
 			})
@@ -54,7 +55,7 @@ func SpecificAuthMiddleware(jwtService security.JwtServiceInterface, requiredRol
 				statusCode = http.StatusUnauthorized
 				code = "MWE001001004"
 			default:
-				statusCode = http.StatusBadRequest
+				statusCode = http.StatusUnauthorized
 				code = "MWE001001005"
 			}
 
@@ -67,7 +68,7 @@ func SpecificAuthMiddleware(jwtService security.JwtServiceInterface, requiredRol
 
 		// ✅ Check required role if specified
 		if !roleAllowed(claims.Role, requiredRoles) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    "MWE001001006",
 				"message": "Insufficient permissions.",
 			})

@@ -105,5 +105,13 @@ func (h ImageHandler) GetImage(c *gin.Context) {
 	}
 
 	c.Header("Content-Type", response.ContentType)
+	c.Header("X-Image-Width", fmt.Sprintf("%d", response.Width))
+	c.Header("X-Image-Height", fmt.Sprintf("%d", response.Height))
+
+	if c.Request.Method == http.MethodHead {
+		c.Status(http.StatusOK)
+		return
+	}
+
 	c.File(response.Path)
 }

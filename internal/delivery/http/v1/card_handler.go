@@ -116,3 +116,19 @@ func (h CardHandler) UpdateCard(c *gin.Context) {
 
 	c.JSON(http.StatusNoContent, nil)
 }
+
+func (h CardHandler) CheckAvailableCard(c *gin.Context) {
+	claims, err := utils.GetUserClaims(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	err = h.cardUseCase.CheckAvailableCard(claims)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
+}

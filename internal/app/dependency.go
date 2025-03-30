@@ -88,11 +88,11 @@ func NewDependencies(cfg *config.Config, dbClient *mongo.Client) *Dependencies {
 		hashService,
 		encryptionService,
 	)
-	userUseCase := userUseCase.NewUserUseCase(userRepo, jwtService)
-	questionUseCase := questionUseCase.NewAdminUseCase(questionGroupRepo, questionChoiceRepo)
+	userUseCase := userUseCase.NewUserUseCase(userRepo, groupRecordRepo, cardRecordRepo, storyRecordRepo, authRepo, jwtService)
+	questionUseCase := questionUseCase.NewAdminUseCase(questionGroupRepo, questionChoiceRepo, groupRecordRepo)
 	recordUseCase := recordUseCase.NewRecordUseCase(groupRecordRepo, cardRecordRepo, storyRecordRepo)
 	imageUseCase := imageUseCase.NewImageUseCase(imageRepo)
-	cardUseCase := cardUseCase.NewCardUseCase(cardRepo, imageRepo)
+	cardUseCase := cardUseCase.NewCardUseCase(cardRepo, imageRepo, cardRecordRepo)
 	healthScoreUseCase := healthScoreUseCase.NewHealthScoreUseCase(healthScoreRepo, imageRepo)
 
 	adminHandlerV1 := v1.NewAdminHandler(adminUseCase)

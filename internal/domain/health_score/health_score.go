@@ -11,6 +11,7 @@ const (
 	ContentTypeImage       = "IMAGE"
 	ContentTypeDescription = "DESCRIPTION"
 	ContentTypeSpace       = "SPACE"
+	ContentTypeURL         = "URL"
 )
 
 type HealthScoreContent struct {

@@ -25,10 +25,6 @@ type CreateQuestionChoiceRequest struct {
 	ShouldInvert  bool   `json:"ShouldInvert"`
 }
 
-type GetAllQuestionChoiceByQuestionGroupRequest struct {
-	QuestionGroup string `json:"questionGroup" binding:"required,max=64"`
-}
-
 type GetAllQuestionChoiceByQuestionGroupOutput struct {
 	Items *[]question.QuestionChoice `json:"items"`
 }
@@ -41,4 +37,19 @@ type UpdateQuestionRequest struct {
 	ID           string `json:"id"`
 	Question     string `json:"question" binding:"required,max=256"`
 	ShouldInvert bool   `json:"ShouldInvert"`
+}
+
+type RemoveChoiceRequest struct {
+	ID string `json:"id"`
+}
+
+type RemoveQuestionGroupRequest struct {
+	ID string `json:"id"`
+}
+
+type UpdateQuestionGroupRequest struct {
+	ID          string `json:"id"`
+	ColumnName  string `json:"columnName" binding:"required,max=64"`
+	Description string `json:"description" binding:"required,max=256"`
+	Limit       int    `json:"limit" binding:"required,max=10"`
 }

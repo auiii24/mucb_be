@@ -61,3 +61,24 @@ func (r *GroupRecordRepositoryMongo) HasSubmittedToday(user primitive.ObjectID) 
 
 	return count > 0, nil
 }
+
+func (r *GroupRecordRepositoryMongo) RemoveDataByUserId(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{
+		"user": objectID,
+	}
+
+	_, err = r.groupRecordCollection.DeleteMany(ctx, filter)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

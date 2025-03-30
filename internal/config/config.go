@@ -20,6 +20,7 @@ type Config struct {
 	EncryptionKey            string
 	AccessTokenExpiredMinute string
 	ApiKey                   string
+	AllowOrigin              string
 }
 
 func LoadConfig() (*Config, error) {
@@ -43,10 +44,11 @@ func LoadConfig() (*Config, error) {
 		ServerMode:               os.Getenv("SERVER_MODE"),
 		ServerPort:               os.Getenv("SERVER_PORT"),
 		AccessTokenKey:           os.Getenv("ACCESS_TOKEN_KEY"),
-		RefreshTokenKey:          os.Getenv("REFRESH_TOKEN_KEY"),
-		EncryptionKey:            os.Getenv("ENCRYPTION_TOKEN_KEY"),
+		RefreshTokenKey:          os.Getenv("REFRESH_TOKEN_32_BYTES_KEY"),
+		EncryptionKey:            os.Getenv("ENCRYPTION_DATA_32_BYTES_KEY"),
 		AccessTokenExpiredMinute: os.Getenv("ACCESS_TOKEN_EXPIRED_MINUTE"),
 		ApiKey:                   os.Getenv("API_KEY"),
+		AllowOrigin:              os.Getenv("ALLOW_ORIGIN"),
 	}
 
 	return config, nil

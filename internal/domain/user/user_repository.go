@@ -5,4 +5,5 @@ type UserRepository interface {
 	FindUserByPhoneNumber(phoneNumber string) (*User, error)
 	FindUserById(id string) (*User, error)
 	UpdateUserInfo(id, name, group string) error
+	RemoveUserById(id string) error
 }

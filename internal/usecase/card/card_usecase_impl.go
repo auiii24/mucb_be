@@ -3,6 +3,7 @@ package card
 import (
 	"mucb_be/internal/domain/card"
 	"mucb_be/internal/domain/image"
+	"mucb_be/internal/domain/record"
 	"mucb_be/internal/domain/user"
 	"mucb_be/internal/errors"
 	"mucb_be/internal/infrastructure/security"
@@ -13,17 +14,20 @@ import (
 )
 
 type CardUserCaseImpl struct {
-	cardRepo  card.CardRepository
-	imageRepo image.ImageRepository
+	cardRepo       card.CardRepository
+	imageRepo      image.ImageRepository
+	cardRecordRepo record.CardRecordRepository
 }
 
 func NewCardUseCase(
 	cardRepo card.CardRepository,
 	imageRepo image.ImageRepository,
+	cardRecordRepo record.CardRecordRepository,
 ) CardInterface {
 	return &CardUserCaseImpl{
-		cardRepo:  cardRepo,
-		imageRepo: imageRepo,
+		cardRepo:       cardRepo,
+		imageRepo:      imageRepo,
+		cardRecordRepo: cardRecordRepo,
 	}
 }
 
@@ -75,6 +79,13 @@ func (u *CardUserCaseImpl) FindAllCard(req *GetCardsRequest, claims *security.Ac
 	var isAdmin bool = true
 	if claims.Role == user.RoleUser {
 		isAdmin = false
+	}
+
+	if !isAdmin {
+		err := u.CheckAvailableCard(claims)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	groups, total, err := u.cardRepo.FindAllCardByRole(req.Page, req.Limit, isAdmin)
@@ -141,6 +152,39 @@ func (u *CardUserCaseImpl) UpdateCardById(req *UpdateCardRequest) error {
 
 	_ = u.imageRepo.UpdateImageStatusById(cardExist.Image.Hex(), false)
 	_ = u.imageRepo.UpdateImageStatusById(imageObjectID.Hex(), true)
+
+	return nil
+}
+
+func (u *CardUserCaseImpl) CheckAvailableCard(claims *security.AccessTokenModel) error {
+	userObjectId, err := primitive.ObjectIDFromHex(claims.ID)
+	if err != nil {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE007006001",
+			"Failed to check user.",
+			err.Error(),
+		)
+	}
+
+	isAlreadySubmit, err := u.cardRecordRepo.HasSubmittedToday(userObjectId)
+	if err != nil {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE007006002",
+			"Failed to check submission status.",
+			err.Error(),
+		)
+	}
+
+	if isAlreadySubmit {
+		return errors.NewCustomError(
+			http.StatusBadRequest,
+			"UCE007006003",
+			"You can only submit once per day",
+			"",
+		)
+	}
 
 	return nil
 }

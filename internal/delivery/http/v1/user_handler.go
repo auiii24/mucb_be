@@ -40,3 +40,33 @@ func (h UserHandler) UpdateUserInfo(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+func (h UserHandler) GetUserInfo(c *gin.Context) {
+	claims, err := utils.GetUserClaims(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	response, err := h.userUseCase.GetUserInfo(claims)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func (h UserHandler) RemoveUser(c *gin.Context) {
+	claims, err := utils.GetUserClaims(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	err = h.userUseCase.RemoveUserAndInfo(claims)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
+}

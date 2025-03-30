@@ -8,4 +8,5 @@ type CardInterface interface {
 	FindAllCard(req *GetCardsRequest, claims *security.AccessTokenModel) (*GetCardsOutput, error)
 	FindCardByIdAndActivate(req *ActivateCard) error
 	UpdateCardById(req *UpdateCardRequest) error
+	CheckAvailableCard(claims *security.AccessTokenModel) error
 }

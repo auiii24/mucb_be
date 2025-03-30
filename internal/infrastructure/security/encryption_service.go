@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"mucb_be/internal/config"
+	"strings"
+	"unicode"
 )
 
 type EncryptionServiceInterface interface {
@@ -83,5 +85,11 @@ func (s *EncryptionService) decryptDataWithKey(ciphertext, key string) (string, 
 	stream := cipher.NewCFBDecrypter(block, iv)
 	stream.XORKeyStream(ciphertextBytes, ciphertextBytes)
 
-	return string(ciphertextBytes), nil
+	decryptedText := string(ciphertextBytes)
+	decryptedText = strings.TrimSpace(decryptedText)
+	decryptedText = strings.TrimFunc(decryptedText, func(r rune) bool {
+		return !unicode.IsPrint(r) // Remove non-printable characters
+	})
+
+	return decryptedText, nil
 }
